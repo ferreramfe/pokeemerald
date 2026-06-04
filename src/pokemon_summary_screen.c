@@ -180,7 +180,7 @@ static EWRAM_DATA struct PokemonSummaryScreenData
     u8 secondMoveIndex;
     bool8 lockMovesFlag; // This is used to prevent the player from changing position of moves in a battle or when trading.
     u8 bgDisplayOrder; // Determines the order page backgrounds are loaded while scrolling between them
-    u8 filler40CA;
+    u8 ivEvMode; // 0=base stats, 1=IVs, 2=EVs
     u8 windowIds[8];
     u8 spriteIds[SPRITE_ARR_ID_COUNT];
     bool8 handleDeoxys;
@@ -311,6 +311,11 @@ static void DestroyMoveSelectorSprites(u8);
 static void SetMainMoveSelectorColor(u8);
 static void KeepMoveSelectorVisible(u8);
 static void SummaryScreen_DestroyAnimDelayTask(void);
+static u8 GetIVColorId(u8 iv);
+static void PrintLeftColumnIVsOrEVs(void);
+static void PrintRightColumnIVsOrEVs(void);
+static void DrawIVEvModeIndicator(void);
+static void RedrawSkillsPageStats(void);
 
 // const rom data
 #include "data/text/move_descriptions.h"
@@ -745,6 +750,8 @@ static const TaskFunc sTextPrinterTasks[] =
 
 static const u8 sMemoNatureTextColor[] = _("{COLOR LIGHT_RED}{SHADOW GREEN}");
 static const u8 sMemoMiscTextColor[] = _("{COLOR WHITE}{SHADOW DARK_GRAY}"); // This is also affected by palettes, apparently
+static const u8 sText_IVs[] = _("IVs");
+static const u8 sText_EVs[] = _("EVs");
 static const u8 sStatsLeftColumnLayout[] = _("{DYNAMIC 0}/{DYNAMIC 1}\n{DYNAMIC 2}\n{DYNAMIC 3}");
 static const u8 sStatsRightColumnLayout[] = _("{DYNAMIC 0}\n{DYNAMIC 1}\n{DYNAMIC 2}");
 static const u8 sMovesPPLayout[] = _("{PP}{DYNAMIC 0}/{DYNAMIC 1}");
@@ -1571,6 +1578,17 @@ static void Task_HandleInput(u8 taskId)
             StopPokemonAnimations();
             PlaySE(SE_SELECT);
             BeginCloseSummaryScreen(taskId);
+        }
+        else if (JOY_NEW(SELECT_BUTTON))
+        {
+            if (sMonSummaryScreen->currPageIndex == PSS_PAGE_SKILLS
+                && !sMonSummaryScreen->summary.isEgg)
+            {
+                PlaySE(SE_SELECT);
+                if (++sMonSummaryScreen->ivEvMode > 2)
+                    sMonSummaryScreen->ivEvMode = 0;
+                RedrawSkillsPageStats();
+            }
         }
     }
 }
@@ -3307,6 +3325,7 @@ static void PrintSkillsPageText(void)
     BufferRightColumnStats();
     PrintRightColumnStats();
     PrintExpPointsNextLevel();
+    DrawIVEvModeIndicator();
 }
 
 static void Task_PrintSkillsPage(u8 taskId)
@@ -3337,6 +3356,9 @@ static void Task_PrintSkillsPage(u8 taskId)
         PrintExpPointsNextLevel();
         break;
     case 8:
+        DrawIVEvModeIndicator();
+        break;
+    case 9:
         DestroyTask(taskId);
         return;
     }
@@ -3390,10 +3412,18 @@ static void PrintRibbonCount(void)
 
 static void BufferLeftColumnStats(void)
 {
-    u8 *currentHPString = Alloc(8);
-    u8 *maxHPString = Alloc(8);
-    u8 *attackString = Alloc(8);
-    u8 *defenseString = Alloc(8);
+    u8 *currentHPString;
+    u8 *maxHPString;
+    u8 *attackString;
+    u8 *defenseString;
+
+    if (sMonSummaryScreen->ivEvMode != 0)
+        return;
+
+    currentHPString = Alloc(8);
+    maxHPString = Alloc(8);
+    attackString = Alloc(8);
+    defenseString = Alloc(8);
 
     ConvertIntToDecimalStringN(currentHPString, sMonSummaryScreen->summary.currentHP, STR_CONV_MODE_RIGHT_ALIGN, 3);
     ConvertIntToDecimalStringN(maxHPString, sMonSummaryScreen->summary.maxHP, STR_CONV_MODE_RIGHT_ALIGN, 3);
@@ -3415,11 +3445,19 @@ static void BufferLeftColumnStats(void)
 
 static void PrintLeftColumnStats(void)
 {
+    if (sMonSummaryScreen->ivEvMode != 0)
+    {
+        PrintLeftColumnIVsOrEVs();
+        return;
+    }
     PrintTextOnWindow(AddWindowFromTemplateList(sPageSkillsTemplate, PSS_DATA_WINDOW_SKILLS_STATS_LEFT), gStringVar4, 4, 1, 0, 0);
 }
 
 static void BufferRightColumnStats(void)
 {
+    if (sMonSummaryScreen->ivEvMode != 0)
+        return;
+
     ConvertIntToDecimalStringN(gStringVar1, sMonSummaryScreen->summary.spatk, STR_CONV_MODE_RIGHT_ALIGN, 3);
     ConvertIntToDecimalStringN(gStringVar2, sMonSummaryScreen->summary.spdef, STR_CONV_MODE_RIGHT_ALIGN, 3);
     ConvertIntToDecimalStringN(gStringVar3, sMonSummaryScreen->summary.speed, STR_CONV_MODE_RIGHT_ALIGN, 3);
@@ -3433,7 +3471,108 @@ static void BufferRightColumnStats(void)
 
 static void PrintRightColumnStats(void)
 {
+    if (sMonSummaryScreen->ivEvMode != 0)
+    {
+        PrintRightColumnIVsOrEVs();
+        return;
+    }
     PrintTextOnWindow(AddWindowFromTemplateList(sPageSkillsTemplate, PSS_DATA_WINDOW_SKILLS_STATS_RIGHT), gStringVar4, 2, 1, 0, 0);
+}
+
+static u8 GetIVColorId(u8 iv)
+{
+    if (iv == 31) return 6;
+    if (iv > 28)  return 5;
+    if (iv < 10)  return 4;
+    return 0;
+}
+
+static void PrintLeftColumnIVsOrEVs(void)
+{
+    bool8 showIVs;
+    u8 windowId;
+    u32 val;
+    u8 str[8];
+    int x;
+
+    showIVs  = (sMonSummaryScreen->ivEvMode == 1);
+    windowId = AddWindowFromTemplateList(sPageSkillsTemplate, PSS_DATA_WINDOW_SKILLS_STATS_LEFT);
+    FillWindowPixelBuffer(windowId, PIXEL_FILL(0));
+
+    val = GetMonData(&sMonSummaryScreen->currentMon, showIVs ? MON_DATA_HP_IV  : MON_DATA_HP_EV);
+    ConvertIntToDecimalStringN(str, val, STR_CONV_MODE_RIGHT_ALIGN, showIVs ? 2 : 3);
+    x = GetStringRightAlignXOffset(FONT_NORMAL, str, 44);
+    PrintTextOnWindow(windowId, str, x, 1, 0, showIVs ? GetIVColorId(val) : 0);
+
+    val = GetMonData(&sMonSummaryScreen->currentMon, showIVs ? MON_DATA_ATK_IV : MON_DATA_ATK_EV);
+    ConvertIntToDecimalStringN(str, val, STR_CONV_MODE_RIGHT_ALIGN, showIVs ? 2 : 3);
+    x = GetStringRightAlignXOffset(FONT_NORMAL, str, 44);
+    PrintTextOnWindow(windowId, str, x, 17, 0, showIVs ? GetIVColorId(val) : 0);
+
+    val = GetMonData(&sMonSummaryScreen->currentMon, showIVs ? MON_DATA_DEF_IV : MON_DATA_DEF_EV);
+    ConvertIntToDecimalStringN(str, val, STR_CONV_MODE_RIGHT_ALIGN, showIVs ? 2 : 3);
+    x = GetStringRightAlignXOffset(FONT_NORMAL, str, 44);
+    PrintTextOnWindow(windowId, str, x, 33, 0, showIVs ? GetIVColorId(val) : 0);
+}
+
+static void PrintRightColumnIVsOrEVs(void)
+{
+    bool8 showIVs;
+    u8 windowId;
+    u32 val;
+    u8 str[8];
+    int x;
+
+    showIVs  = (sMonSummaryScreen->ivEvMode == 1);
+    windowId = AddWindowFromTemplateList(sPageSkillsTemplate, PSS_DATA_WINDOW_SKILLS_STATS_RIGHT);
+    FillWindowPixelBuffer(windowId, PIXEL_FILL(0));
+
+    val = GetMonData(&sMonSummaryScreen->currentMon, showIVs ? MON_DATA_SPATK_IV : MON_DATA_SPATK_EV);
+    ConvertIntToDecimalStringN(str, val, STR_CONV_MODE_RIGHT_ALIGN, showIVs ? 2 : 3);
+    x = GetStringRightAlignXOffset(FONT_NORMAL, str, 22);
+    PrintTextOnWindow(windowId, str, x, 1, 0, showIVs ? GetIVColorId(val) : 0);
+
+    val = GetMonData(&sMonSummaryScreen->currentMon, showIVs ? MON_DATA_SPDEF_IV : MON_DATA_SPDEF_EV);
+    ConvertIntToDecimalStringN(str, val, STR_CONV_MODE_RIGHT_ALIGN, showIVs ? 2 : 3);
+    x = GetStringRightAlignXOffset(FONT_NORMAL, str, 22);
+    PrintTextOnWindow(windowId, str, x, 17, 0, showIVs ? GetIVColorId(val) : 0);
+
+    val = GetMonData(&sMonSummaryScreen->currentMon, showIVs ? MON_DATA_SPEED_IV : MON_DATA_SPEED_EV);
+    ConvertIntToDecimalStringN(str, val, STR_CONV_MODE_RIGHT_ALIGN, showIVs ? 2 : 3);
+    x = GetStringRightAlignXOffset(FONT_NORMAL, str, 22);
+    PrintTextOnWindow(windowId, str, x, 33, 0, showIVs ? GetIVColorId(val) : 0);
+}
+
+static void DrawIVEvModeIndicator(void)
+{
+    if (sMonSummaryScreen->currPageIndex != PSS_PAGE_SKILLS)
+        return;
+    FillWindowPixelBuffer(PSS_LABEL_WINDOW_POKEMON_SKILLS_STATUS, PIXEL_FILL(0));
+    if (sMonSummaryScreen->ivEvMode == 1)
+        PrintTextOnWindow(PSS_LABEL_WINDOW_POKEMON_SKILLS_STATUS, sText_IVs, 2, 1, 0, 5);
+    else if (sMonSummaryScreen->ivEvMode == 2)
+        PrintTextOnWindow(PSS_LABEL_WINDOW_POKEMON_SKILLS_STATUS, sText_EVs, 2, 1, 0, 6);
+    else
+        PrintTextOnWindow(PSS_LABEL_WINDOW_POKEMON_SKILLS_STATUS, gText_Status, 2, 1, 0, 1);
+    ScheduleBgCopyTilemapToVram(0);
+}
+
+static void RedrawSkillsPageStats(void)
+{
+    u8 leftId;
+    u8 rightId;
+
+    leftId  = AddWindowFromTemplateList(sPageSkillsTemplate, PSS_DATA_WINDOW_SKILLS_STATS_LEFT);
+    rightId = AddWindowFromTemplateList(sPageSkillsTemplate, PSS_DATA_WINDOW_SKILLS_STATS_RIGHT);
+    FillWindowPixelBuffer(leftId, PIXEL_FILL(0));
+    FillWindowPixelBuffer(rightId, PIXEL_FILL(0));
+    BufferLeftColumnStats();
+    PrintLeftColumnStats();
+    BufferRightColumnStats();
+    PrintRightColumnStats();
+    CopyWindowToVram(leftId, COPYWIN_GFX);
+    CopyWindowToVram(rightId, COPYWIN_GFX);
+    DrawIVEvModeIndicator();
 }
 
 static void PrintExpPointsNextLevel(void)
