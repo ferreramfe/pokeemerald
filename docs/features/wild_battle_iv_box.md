@@ -12,7 +12,7 @@ The box starts **hidden** at the start of every battle. Once shown, it stays sho
 └──────────────────────┘▒
 ```
 
-`SPD` = Sp. Def, `SPE` = Speed. These abbreviations keep the three columns inside the 100px box.
+`SPD` = Sp. Def, `SPE` = Speed. These abbreviations keep the three columns inside the 112px box.
 
 Files touched:
 
@@ -74,27 +74,27 @@ Because of this, the box (when toggled on) only appears on the action menu. Duri
     .bg = 0,
     .tilemapLeft = 1,     // screen x = 8px
     .tilemapTop = 26,     // screen y = (26 - 20) * 8 = 48px during action selection
-    .width = 13,          // 104px: 100px box + 3px shadow + 1px spare
-    .height = 5,          // 40px:  36px box + 3px shadow + 1px spare
+    .width = 15,          // 120px: 112px box + 3px shadow + 5px spare
+    .height = 6,          // 48px:  44px box + 3px shadow + 1px spare
     .paletteNum = 12,     // custom palette, see section 4
-    .baseBlock = 0x01f8,  // 65 tiles -> 0x01F8-0x0238
+    .baseBlock = 0x01f8,  // 90 tiles -> 0x01F8-0x0251
 },
 ```
 
 ### Choosing `baseBlock`
 
-The window needs `width × height` = **65 tiles**. They must not overlap any BG0 window that is drawn while the box is on screen, or while it stays in VRAM:
+The window needs `width × height` = **90 tiles**. They must not overlap any BG0 window that is drawn while the box is on screen, or while it stays in VRAM:
 
 | Window | baseBlock | Tile range |
 |---|---|---|
 | `B_WIN_MSG` | `0x0090` | `0x0090`–`0x00F7` |
 | `B_WIN_ACTION_MENU` | `0x0190` | `0x0190`–`0x01BF` |
 | `B_WIN_ACTION_PROMPT` | `0x01C0` | `0x01C0`–`0x01F7` |
-| **`B_WIN_ENEMY_IV`** | **`0x01F8`** | **`0x01F8`–`0x0238`** |
+| **`B_WIN_ENEMY_IV`** | **`0x01F8`** | **`0x01F8`–`0x0251`** |
 | `B_WIN_PP` | `0x0290` | `0x0290`–`0x0297` |
 | `B_WIN_MOVE_NAME_1..4` | `0x0300`–`0x0330` | `0x0300`–`0x033F` |
 
-Free space between the action prompt and the PP window is `0x01F8`–`0x028F` (152 tiles). The earlier `0x0250` base only had room for 64 tiles before `B_WIN_PP`. A 13×5 window there would have had its last tile overwritten whenever the move menu opened.
+Free space between the action prompt and the PP window is `0x01F8`–`0x028F` (152 tiles). The earlier `0x0250` base only had room for 64 tiles before `B_WIN_PP`. A larger window there would have had its last tiles overwritten whenever the move menu opened. The current 90 tiles leave 62 spare before `B_WIN_PP`.
 
 ---
 
@@ -155,9 +155,9 @@ All drawing lives in `src/battle_main.c`, just above `TurnValuesCleanUp`.
 0. If `sShowEnemyIVBox` is `FALSE`, clears the window to transparent, uploads it and returns. That's how the box is hidden: it's the same window, just blank.
 1. Finds the active enemy with `gEnemyParty[gBattlerPartyIndexes[GetBattlerAtPosition(B_POSITION_OPPONENT_LEFT)]]`, not a hard-coded `gEnemyParty[0]`.
 2. Loads the palette.
-3. Clears the window to transparent, then fills the 100×36 box area with cream.
+3. Clears the window to transparent, then fills the 112×44 box area with cream.
 4. Prints the nature name (`gNatureNamePointers[nature]`, from `pokemon_summary_screen.h`) top-left, and "IVs" right-aligned with `GetStringWidth`.
-5. Prints six stats in a 3×2 grid via `DrawIvBoxStat`, with columns at x = 5 / 36 / 67 and rows at y = 13 / 23.
+5. Prints six stats in a 3×2 grid via `DrawIvBoxStat`, using the `IVBOX_COL_*` / `IVBOX_ROW_*` layout constants (section 5.4).
 6. Draws the frame **last**, so no text cell can paint over the border.
 7. `PutWindowTilemap` + `CopyWindowToVram(..., COPYWIN_FULL)`.
 
@@ -169,7 +169,7 @@ All text uses `FONT_SMALL_NARROW` (max glyph ≈ 5×8 px) and `TEXT_SKIP_DRAW`, 
 static void DrawIvBoxStat(const u8 *label, u8 stat, u32 iv, u8 nature, u8 x, u8 y)
 ```
 
-- The label is drawn at `x` and the value right-aligned (2 digits) at `x + 16`.
+- The label is drawn at `x` and the value right-aligned (2 digits) at `x + IVBOX_VALUE_X` (20).
 - For any stat other than HP, `gNatureStatTable[nature][stat - 1]` sets the color: `> 0` = red, `< 0` = blue, `0` = default. The table is indexed from `STAT_ATK` and excludes HP, hence the `- 1`.
 - When the stat is neutral, the label uses the muted label color and the value uses the dark text color. When it's affected, both use the nature color.
 
@@ -177,11 +177,21 @@ static void DrawIvBoxStat(const u8 *label, u8 stat, u32 iv, u8 nature, u8 x, u8 
 
 Uses only `FillWindowPixelRect`:
 
-1. Shadow strips: bottom (`x=3, y=36, w=100, h=3`) and right (`x=100, y=3, w=3, h=36`).
+1. Shadow strips: bottom (`x=3, y=44, w=112, h=3`) and right (`x=112, y=3, w=3, h=44`).
 2. Four 2px border edges, inset by 1px at the ends. This leaves the outer corner pixels transparent, which gives the rounded look.
 3. Single pixels at each inner corner to round the inside.
 
-Box size is controlled by `IVBOX_WIDTH` (100), `IVBOX_HEIGHT` (36) and `IVBOX_SHADOW` (3). If you enlarge the box, also grow the window template's `width` / `height` and re-check the `baseBlock` range.
+Box size is controlled by `IVBOX_WIDTH` (112), `IVBOX_HEIGHT` (44) and `IVBOX_SHADOW` (3). If you enlarge the box, also grow the window template's `width` / `height` and re-check the `baseBlock` range.
+
+### 5.4 Text layout
+
+| Constant | Value | Meaning |
+|---|---|---|
+| `IVBOX_ROW_1` / `_2` / `_3` | 2 / 15 / 28 | y of the nature line and the two stat rows |
+| `IVBOX_COL_1` / `_2` / `_3` | 5 / 41 / 77 | x of each stat column |
+| `IVBOX_VALUE_X` | 20 | Gap from a label's x to its value's x |
+
+**Rows must be ≥ 13px apart.** A `FONT_SMALL_NARROW` glyph cell is about 13px tall, and the printer fills the whole cell with the background color. If rows are closer than that, each row erases the bottom of the one above it. The first layout used 10px spacing, which cut the digits in half. For the same reason, the last row's cell (28 + 13 = 41) must end above the bottom border at `IVBOX_HEIGHT - 2` (42).
 
 ---
 
@@ -249,6 +259,7 @@ Each hook respects `sShowEnemyIVBox`, so a hidden box stays hidden. `DrawEnemyIV
 - **`StringCopy` vs `StringAppend`.** The first version built one long string and used `StringCopy` for the last (Speed) segment. That wiped the buffer, so only Speed was shown. The current code prints each stat separately, so this can't happen again.
 - **`_("...")` literals can't be function arguments.** The macro expands to an array initializer. Declare them as `static const u8 sText_X[] = _("...");` first.
 - **C89 declarations.** Declare all locals at the top of a block, before any statement. agbcc rejects mixed declarations.
+- **Text rows overlapping.** Glyph cells paint their background, so rows placed too close clip each other (see 5.4).
 - **Palette index 0 is transparent on BGs.** That's why the window is cleared with `PIXEL_FILL(0)` before the box is drawn: the area outside the rounded corners and shadow shows the battle background.
 - **Double wild battles:** only the left opponent is shown.
 
@@ -285,6 +296,7 @@ In-game checklist:
 | `sStandardBattleWindowTemplates[B_WIN_ENEMY_IV]` | `src/battle_bg.c` | Position, size, palette, VRAM tiles |
 | `IVBOX_PAL_SLOT`, `sIvBoxPalette` | `src/battle_main.c` | BG palette 12 contents |
 | `IVBOX_WIDTH` / `IVBOX_HEIGHT` / `IVBOX_SHADOW` | `src/battle_main.c` | Box geometry in pixels |
+| `IVBOX_ROW_*` / `IVBOX_COL_*` / `IVBOX_VALUE_X` | `src/battle_main.c` | Text layout |
 | `sShowEnemyIVBox` | `src/battle_main.c` | Shown/hidden flag, reset each battle |
 | `ToggleEnemyIVBox` | `src/battle_main.c` | Flips the flag and redraws; `FALSE` in trainer battles |
 | `HandleInputChooseAction` | `src/battle_controller_player.c` | Action-menu input; SELECT branch |
