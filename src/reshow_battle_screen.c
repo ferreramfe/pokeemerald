@@ -149,6 +149,9 @@ static void CB2_ReshowBattleScreenAfterMenu(void)
 
             ActionSelectionCreateCursorAt(gActionSelectionCursor[gBattlerInMenuId], 0);
 
+            if (!(gBattleTypeFlags & BATTLE_TYPE_TRAINER))
+                DrawEnemyIVs();
+
             if (gWirelessCommType != 0 && gReceivedRemoteLinkPlayers)
             {
                 LoadWirelessStatusIndicatorSpriteGfx();

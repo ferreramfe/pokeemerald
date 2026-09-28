@@ -33,7 +33,9 @@
 #include "party_menu.h"
 #include "pokeball.h"
 #include "pokedex.h"
+#include "menu.h"
 #include "pokemon.h"
+#include "pokemon_summary_screen.h"
 #include "random.h"
 #include "recorded_battle.h"
 #include "roamer.h"
@@ -3903,6 +3905,8 @@ static void TryDoEventsBeforeFirstTurn(void)
     *(&gBattleStruct->absentBattlerFlags) = gAbsentBattlerFlags;
     BattlePutTextOnWindow(gText_EmptyString3, B_WIN_MSG);
     gBattleMainFunc = HandleTurnActionSelectionState;
+    if (!(gBattleTypeFlags & BATTLE_TYPE_TRAINER))
+        DrawEnemyIVs();
     ResetSentPokesToOpponentValue();
 
     for (i = 0; i < BATTLE_COMMUNICATION_ENTRIES_COUNT; i++)
@@ -4010,6 +4014,8 @@ void BattleTurnPassed(void)
     *(&gBattleStruct->absentBattlerFlags) = gAbsentBattlerFlags;
     BattlePutTextOnWindow(gText_EmptyString3, B_WIN_MSG);
     gBattleMainFunc = HandleTurnActionSelectionState;
+    if (!(gBattleTypeFlags & BATTLE_TYPE_TRAINER))
+        DrawEnemyIVs();
     gRandomTurnNumber = Random();
 
     if (gBattleTypeFlags & BATTLE_TYPE_PALACE)
@@ -4852,6 +4858,122 @@ static void SetActionsAndBattlersTurnOrder(void)
     }
     gBattleMainFunc = CheckFocusPunch_ClearVarsBeforeTurnStarts;
     gBattleStruct->focusPunchBattlerId = 0;
+}
+
+// Enemy IV/nature box, styled after the battle healthboxes.
+#define IVBOX_PAL_SLOT  12
+
+enum {
+    IVBOX_COLOR_TRANSPARENT,
+    IVBOX_COLOR_FILL,
+    IVBOX_COLOR_BORDER,
+    IVBOX_COLOR_SHADOW,
+    IVBOX_COLOR_TEXT,
+    IVBOX_COLOR_TEXT_SHADOW,
+    IVBOX_COLOR_UP,
+    IVBOX_COLOR_UP_SHADOW,
+    IVBOX_COLOR_DOWN,
+    IVBOX_COLOR_DOWN_SHADOW,
+    IVBOX_COLOR_LABEL,
+};
+
+static const u16 sIvBoxPalette[16] =
+{
+    [IVBOX_COLOR_TRANSPARENT] = RGB(0, 0, 0),
+    [IVBOX_COLOR_FILL]        = RGB(31, 31, 26),
+    [IVBOX_COLOR_BORDER]      = RGB(5, 7, 5),
+    [IVBOX_COLOR_SHADOW]      = RGB(10, 13, 11),
+    [IVBOX_COLOR_TEXT]        = RGB(8, 8, 8),
+    [IVBOX_COLOR_TEXT_SHADOW] = RGB(26, 26, 20),
+    [IVBOX_COLOR_UP]          = RGB(28, 5, 4),
+    [IVBOX_COLOR_UP_SHADOW]   = RGB(31, 20, 18),
+    [IVBOX_COLOR_DOWN]        = RGB(5, 9, 28),
+    [IVBOX_COLOR_DOWN_SHADOW] = RGB(20, 23, 31),
+    [IVBOX_COLOR_LABEL]       = RGB(11, 15, 12),
+};
+
+static const u8 sIvBoxTextColors[] = {IVBOX_COLOR_FILL, IVBOX_COLOR_TEXT, IVBOX_COLOR_TEXT_SHADOW};
+static const u8 sIvBoxLabelColors[] = {IVBOX_COLOR_FILL, IVBOX_COLOR_LABEL, IVBOX_COLOR_TEXT_SHADOW};
+static const u8 sIvBoxUpColors[] = {IVBOX_COLOR_FILL, IVBOX_COLOR_UP, IVBOX_COLOR_UP_SHADOW};
+static const u8 sIvBoxDownColors[] = {IVBOX_COLOR_FILL, IVBOX_COLOR_DOWN, IVBOX_COLOR_DOWN_SHADOW};
+
+static const u8 sText_IvBoxHeader[] = _("IVs");
+static const u8 sText_IvHp[]    = _("HP");
+static const u8 sText_IvAtk[]   = _("ATK");
+static const u8 sText_IvDef[]   = _("DEF");
+static const u8 sText_IvSpAtk[] = _("SPA");
+static const u8 sText_IvSpDef[] = _("SPD");
+static const u8 sText_IvSpeed[] = _("SPE");
+
+// Box size in pixels, excluding the drop shadow
+#define IVBOX_WIDTH   100
+#define IVBOX_HEIGHT  36
+#define IVBOX_SHADOW  3
+
+static void DrawIvBoxFrame(void)
+{
+    u8 win = B_WIN_ENEMY_IV;
+
+    // Drop shadow down-right, then a 2px dark border, like the healthboxes
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_SHADOW), IVBOX_SHADOW, IVBOX_HEIGHT, IVBOX_WIDTH, IVBOX_SHADOW);
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_SHADOW), IVBOX_WIDTH, IVBOX_SHADOW, IVBOX_SHADOW, IVBOX_HEIGHT);
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_BORDER), 1, 0, IVBOX_WIDTH - 2, 2);
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_BORDER), 1, IVBOX_HEIGHT - 2, IVBOX_WIDTH - 2, 2);
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_BORDER), 0, 1, 2, IVBOX_HEIGHT - 2);
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_BORDER), IVBOX_WIDTH - 2, 1, 2, IVBOX_HEIGHT - 2);
+    // Round the inner corners
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_BORDER), 2, 2, 1, 1);
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_BORDER), IVBOX_WIDTH - 3, 2, 1, 1);
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_BORDER), 2, IVBOX_HEIGHT - 3, 1, 1);
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_BORDER), IVBOX_WIDTH - 3, IVBOX_HEIGHT - 3, 1, 1);
+}
+
+static void DrawIvBoxStat(const u8 *label, u8 stat, u32 iv, u8 nature, u8 x, u8 y)
+{
+    u8 valueText[4];
+    const u8 *colors = sIvBoxTextColors;
+
+    // gNatureStatTable is indexed from STAT_ATK and excludes HP
+    if (stat != STAT_HP)
+    {
+        if (gNatureStatTable[nature][stat - 1] > 0)
+            colors = sIvBoxUpColors;
+        else if (gNatureStatTable[nature][stat - 1] < 0)
+            colors = sIvBoxDownColors;
+    }
+
+    AddTextPrinterParameterized4(B_WIN_ENEMY_IV, FONT_SMALL_NARROW, x, y, 0, 0,
+                                 colors == sIvBoxTextColors ? sIvBoxLabelColors : colors, TEXT_SKIP_DRAW, label);
+    ConvertIntToDecimalStringN(valueText, iv, STR_CONV_MODE_RIGHT_ALIGN, 2);
+    AddTextPrinterParameterized4(B_WIN_ENEMY_IV, FONT_SMALL_NARROW, x + 16, y, 0, 0, colors, TEXT_SKIP_DRAW, valueText);
+}
+
+void DrawEnemyIVs(void)
+{
+    struct Pokemon *mon = &gEnemyParty[gBattlerPartyIndexes[GetBattlerAtPosition(B_POSITION_OPPONENT_LEFT)]];
+    u8 nature = GetNature(mon);
+
+    LoadPalette(sIvBoxPalette, BG_PLTT_ID(IVBOX_PAL_SLOT), sizeof(sIvBoxPalette));
+
+    FillWindowPixelBuffer(B_WIN_ENEMY_IV, PIXEL_FILL(IVBOX_COLOR_TRANSPARENT));
+    FillWindowPixelRect(B_WIN_ENEMY_IV, PIXEL_FILL(IVBOX_COLOR_FILL), 0, 0, IVBOX_WIDTH, IVBOX_HEIGHT);
+
+    AddTextPrinterParameterized4(B_WIN_ENEMY_IV, FONT_SMALL_NARROW, 5, 2, 0, 0, sIvBoxTextColors, TEXT_SKIP_DRAW, gNatureNamePointers[nature]);
+    AddTextPrinterParameterized4(B_WIN_ENEMY_IV, FONT_SMALL_NARROW, IVBOX_WIDTH - 5 - GetStringWidth(FONT_SMALL_NARROW, sText_IvBoxHeader, 0), 2,
+                                 0, 0, sIvBoxLabelColors, TEXT_SKIP_DRAW, sText_IvBoxHeader);
+
+    DrawIvBoxStat(sText_IvHp,    STAT_HP,    GetMonData(mon, MON_DATA_HP_IV),    nature, 5,  13);
+    DrawIvBoxStat(sText_IvAtk,   STAT_ATK,   GetMonData(mon, MON_DATA_ATK_IV),   nature, 36, 13);
+    DrawIvBoxStat(sText_IvDef,   STAT_DEF,   GetMonData(mon, MON_DATA_DEF_IV),   nature, 67, 13);
+    DrawIvBoxStat(sText_IvSpAtk, STAT_SPATK, GetMonData(mon, MON_DATA_SPATK_IV), nature, 5,  23);
+    DrawIvBoxStat(sText_IvSpDef, STAT_SPDEF, GetMonData(mon, MON_DATA_SPDEF_IV), nature, 36, 23);
+    DrawIvBoxStat(sText_IvSpeed, STAT_SPEED, GetMonData(mon, MON_DATA_SPEED_IV), nature, 67, 23);
+
+    // Frame last so text cells can't paint over the border
+    DrawIvBoxFrame();
+
+    PutWindowTilemap(B_WIN_ENEMY_IV);
+    CopyWindowToVram(B_WIN_ENEMY_IV, COPYWIN_FULL);
 }
 
 static void TurnValuesCleanUp(bool8 var0)
