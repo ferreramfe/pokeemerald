@@ -1,6 +1,8 @@
 # Wild Battle IV / Nature Box
 
-During wild battles, a panel under the enemy healthbox shows the opposing Pokémon's **nature** and all six **IVs**. It's styled like the healthbox: a cream fill, a dark 2px rounded border and a drop shadow at the bottom-right. The stat the nature raises is drawn in **red**, and the one it lowers in **blue**.
+During wild battles, pressing **SELECT** on the FIGHT/BAG/POKéMON/RUN menu shows or hides a panel under the enemy healthbox. The panel shows the opposing Pokémon's **nature** and all six **IVs**. It's styled like the healthbox: a cream fill, a dark 2px rounded border and a drop shadow at the bottom-right. The stat the nature raises is drawn in **red**, and the one it lowers in **blue**.
+
+The box starts **hidden** at the start of every battle. Once shown, it stays shown for the rest of that battle, turn after turn, until SELECT is pressed again.
 
 ```
 ┌──────────────────────┐
@@ -18,8 +20,9 @@ Files touched:
 |---|---|
 | `include/constants/battle.h` | `B_WIN_ENEMY_IV` window ID |
 | `src/battle_bg.c` | Window template in `sStandardBattleWindowTemplates` |
-| `src/battle_main.c` | Palette, colors, strings, `DrawIvBoxFrame`, `DrawIvBoxStat`, `DrawEnemyIVs`, and the turn-start hooks |
-| `include/battle_main.h` | `DrawEnemyIVs` prototype (exported for the reshow hook) |
+| `src/battle_main.c` | Palette, colors, strings, `sShowEnemyIVBox`, `DrawIvBoxFrame`, `DrawIvBoxStat`, `DrawEnemyIVs`, `ToggleEnemyIVBox`, and the turn-start hooks |
+| `include/battle_main.h` | `DrawEnemyIVs` and `ToggleEnemyIVBox` prototypes |
+| `src/battle_controller_player.c` | SELECT handler on the action menu |
 | `src/reshow_battle_screen.c` | Redraws the box after returning from the Bag/Party menu |
 
 The feature is UI-only. It reads data with `GetMonData` and changes no save data.
@@ -48,7 +51,7 @@ tilemapTop  = screen_y_pixels / 8 + 20
 tilemapLeft = screen_x_pixels / 8
 ```
 
-Because of this, the box only appears on the action menu. During messages, animations and move selection it's scrolled off-screen automatically, with no extra code.
+Because of this, the box (when toggled on) only appears on the action menu. During messages, animations and move selection it's scrolled off-screen automatically, with no extra code.
 
 ---
 
@@ -149,6 +152,7 @@ All drawing lives in `src/battle_main.c`, just above `TurnValuesCleanUp`.
 
 ### 5.1 `DrawEnemyIVs` — entry point
 
+0. If `sShowEnemyIVBox` is `FALSE`, clears the window to transparent, uploads it and returns. That's how the box is hidden: it's the same window, just blank.
 1. Finds the active enemy with `gEnemyParty[gBattlerPartyIndexes[GetBattlerAtPosition(B_POSITION_OPPONENT_LEFT)]]`, not a hard-coded `gEnemyParty[0]`.
 2. Loads the palette.
 3. Clears the window to transparent, then fills the 100×36 box area with cream.
@@ -181,21 +185,66 @@ Box size is controlled by `IVBOX_WIDTH` (100), `IVBOX_HEIGHT` (36) and `IVBOX_SH
 
 ---
 
-## 6. Lifecycle hooks
+## 6. The SELECT toggle
 
-`DrawEnemyIVs` is called in three places, each guarded by `!(gBattleTypeFlags & BATTLE_TYPE_TRAINER)`:
+### 6.1 State
+
+```c
+// src/battle_main.c, after sFlickerArray
+EWRAM_DATA static bool8 sShowEnemyIVBox = FALSE;
+```
+
+`BattleStartClearSetData` resets it to `FALSE`, so every battle starts with the box hidden. It costs 1 byte of EWRAM, which is already 95% full, so keep additions this small.
+
+### 6.2 `ToggleEnemyIVBox`
+
+```c
+bool8 ToggleEnemyIVBox(void)
+{
+    if (gBattleTypeFlags & BATTLE_TYPE_TRAINER)
+        return FALSE;
+
+    sShowEnemyIVBox = !sShowEnemyIVBox;
+    DrawEnemyIVs();
+    return TRUE;
+}
+```
+
+It returns `FALSE` in trainer battles, so the caller can skip the sound effect. Pressing SELECT there does nothing at all.
+
+### 6.3 Input
+
+`HandleInputChooseAction` in `src/battle_controller_player.c` is the action-menu input handler. A new branch goes after the existing `START_BUTTON` one (START swaps HP bars and HP text):
+
+```c
+else if (JOY_NEW(SELECT_BUTTON))
+{
+    if (ToggleEnemyIVBox())
+        PlaySE(SE_SELECT);
+}
+```
+
+SELECT was unused on the action menu. It stays **move swapping** in the move menu (`HandleInputChooseMove`), which is untouched. The toggle doesn't use up the player's turn: it's just a redraw, and no action is sent to the battle engine.
+
+In double battles, both of the player's Pokémon use this handler, so SELECT works while choosing for either one.
+
+---
+
+## 7. Lifecycle hooks
+
+Besides the toggle, `DrawEnemyIVs` is called in three places, each guarded by `!(gBattleTypeFlags & BATTLE_TYPE_TRAINER)`:
 
 | Where | When |
 |---|---|
 | `TryDoEventsBeforeFirstTurn` (`battle_main.c`) | Right after `gBattleMainFunc = HandleTurnActionSelectionState` — turn 1 |
-| `BattleTurnPassed` (`battle_main.c`) | Same assignment — every later turn. Also repairs tiles that animations may have overwritten |
-| `CB2_ReshowBattleScreenAfterMenu`, case 19 (`reshow_battle_screen.c`) | After returning from the Bag/Party/summary menus. That path clears all VRAM and re-inits windows, so without this hook the box vanished until the next turn |
+| `BattleTurnPassed` (`battle_main.c`) | Same assignment — every later turn. Also repairs tiles that animations may have overwritten. If the box is shown, it stays shown |
+| `CB2_ReshowBattleScreenAfterMenu`, case 19 (`reshow_battle_screen.c`) | After returning from the Bag/Party/summary menus. That path clears all VRAM and re-inits windows, so without this hook a shown box vanished until the next turn |
 
-`DrawEnemyIVs` is non-static and declared in `include/battle_main.h` so `reshow_battle_screen.c` can call it (it gets the prototype via `battle.h`).
+Each hook respects `sShowEnemyIVBox`, so a hidden box stays hidden. `DrawEnemyIVs` is non-static and declared in `include/battle_main.h` so `reshow_battle_screen.c` can call it (it gets the prototype via `battle.h`).
 
 ---
 
-## 7. Gotchas
+## 8. Gotchas
 
 - **`StringCopy` vs `StringAppend`.** The first version built one long string and used `StringCopy` for the last (Speed) segment. That wiped the buffer, so only Speed was shown. The current code prints each stat separately, so this can't happen again.
 - **`_("...")` literals can't be function arguments.** The macro expands to an array initializer. Declare them as `static const u8 sText_X[] = _("...");` first.
@@ -205,7 +254,7 @@ Box size is controlled by `IVBOX_WIDTH` (100), `IVBOX_HEIGHT` (36) and `IVBOX_SH
 
 ---
 
-## 8. Build and test
+## 9. Build and test
 
 From PowerShell (the toolchain lives in WSL Ubuntu):
 
@@ -215,16 +264,20 @@ wsl -d Ubuntu --cd /mnt/d/pkm/pokeemerald -- make -j16
 
 In-game checklist:
 
-1. Start a wild battle. On the FIGHT/BAG/POKéMON/RUN menu, the box appears under the enemy healthbox with the nature and six IVs.
-2. The nature's raised stat is red and its lowered stat is blue. Neutral natures (Hardy, Docile, Serious, Bashful, Quirky) show no colored stat.
-3. Pick FIGHT → the box disappears. Press B → it returns intact.
-4. Open BAG or POKéMON and back out → the box is still there.
-5. Use a move → the box is hidden during messages and animations, then redrawn on the next turn.
-6. Trainer battle → no box.
+1. Start a wild battle → no box on the action menu.
+2. Press SELECT → the box appears under the enemy healthbox with the nature and six IVs, and a select sound plays.
+3. The nature's raised stat is red and its lowered stat is blue. Neutral natures (Hardy, Docile, Serious, Bashful, Quirky) show no colored stat.
+4. Press SELECT again → the box disappears. Press it once more → it's back.
+5. With the box shown, pick FIGHT → the box disappears. Press B → it returns intact.
+6. Open BAG or POKéMON and back out → the box is in the same state (shown or hidden) as before.
+7. Use a move with the box shown → it's hidden during messages and animations, and still shown on the next turn.
+8. Start a new wild battle → the box starts hidden again.
+9. In the move menu, SELECT still swaps moves.
+10. Trainer battle → SELECT does nothing, and no sound plays.
 
 ---
 
-## 9. Quick reference
+## 10. Quick reference
 
 | Symbol | File | Purpose |
 |---|---|---|
@@ -232,7 +285,10 @@ In-game checklist:
 | `sStandardBattleWindowTemplates[B_WIN_ENEMY_IV]` | `src/battle_bg.c` | Position, size, palette, VRAM tiles |
 | `IVBOX_PAL_SLOT`, `sIvBoxPalette` | `src/battle_main.c` | BG palette 12 contents |
 | `IVBOX_WIDTH` / `IVBOX_HEIGHT` / `IVBOX_SHADOW` | `src/battle_main.c` | Box geometry in pixels |
-| `DrawEnemyIVs` | `src/battle_main.c` | Entry point |
+| `sShowEnemyIVBox` | `src/battle_main.c` | Shown/hidden flag, reset each battle |
+| `ToggleEnemyIVBox` | `src/battle_main.c` | Flips the flag and redraws; `FALSE` in trainer battles |
+| `HandleInputChooseAction` | `src/battle_controller_player.c` | Action-menu input; SELECT branch |
+| `DrawEnemyIVs` | `src/battle_main.c` | Entry point (draws or clears) |
 | `DrawIvBoxStat` | `src/battle_main.c` | One label/value with nature coloring |
 | `DrawIvBoxFrame` | `src/battle_main.c` | Border, rounded corners, shadow |
 | `gNatureStatTable` | `src/pokemon.c` | Nature → +1/0/−1 per stat (ATK, DEF, SPE, SPA, SPD) |

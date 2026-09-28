@@ -69,6 +69,7 @@ void SwitchInClearSetData(void);
 void FaintClearSetData(void);
 void BattleTurnPassed(void);
 void DrawEnemyIVs(void);
+bool8 ToggleEnemyIVBox(void);
 u8 IsRunningFromBattleImpossible(void);
 void SwitchPartyOrder(u8 battler);
 void SwapTurnOrder(u8 id1, u8 id2);

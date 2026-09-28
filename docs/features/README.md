@@ -5,7 +5,7 @@ Documentation for changes made on top of vanilla pret/pokeemerald. One file per 
 | Feature | Doc | Main files |
 |---|---|---|
 | IV/EV toggle on the Summary Screen (SELECT on the Skills page) | [iv_ev_summary_screen.md](iv_ev_summary_screen.md) | `src/pokemon_summary_screen.c` |
-| Enemy IV + nature box in wild battles | [wild_battle_iv_box.md](wild_battle_iv_box.md) | `src/battle_main.c`, `src/battle_bg.c`, `src/reshow_battle_screen.c` |
+| Enemy IV + nature box in wild battles (SELECT on the action menu) | [wild_battle_iv_box.md](wild_battle_iv_box.md) | `src/battle_main.c`, `src/battle_bg.c`, `src/battle_controller_player.c`, `src/reshow_battle_screen.c` |
 
 ## Building
 

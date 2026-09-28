@@ -327,6 +327,11 @@ static void HandleInputChooseAction(void)
     {
         SwapHpBarsWithHpText();
     }
+    else if (JOY_NEW(SELECT_BUTTON))
+    {
+        if (ToggleEnemyIVBox())
+            PlaySE(SE_SELECT);
+    }
 }
 
 static void UNUSED UnusedEndBounceEffect(void)

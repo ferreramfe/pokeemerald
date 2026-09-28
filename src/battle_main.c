@@ -145,6 +145,7 @@ EWRAM_DATA u8 gBattleTextBuff3[TEXT_BUFF_ARRAY_COUNT] = {0};
 // is removed (and none of the buffers above are increased in size)
 // it will instead overflow into useful data.
 EWRAM_DATA static u32 sFlickerArray[25] = {0};
+EWRAM_DATA static bool8 sShowEnemyIVBox = FALSE; // Toggled with SELECT on the action menu
 EWRAM_DATA u32 gBattleTypeFlags = 0;
 EWRAM_DATA u8 gBattleEnvironment = 0;
 EWRAM_DATA u32 gUnusedFirstBattleVar1 = 0; // Never read
@@ -3041,6 +3042,7 @@ static void BattleStartClearSetData(void)
 
     TurnValuesCleanUp(FALSE);
     SpecialStatusesClear();
+    sShowEnemyIVBox = FALSE;
 
     for (i = 0; i < MAX_BATTLERS_COUNT; i++)
     {
@@ -4906,9 +4908,19 @@ static const u8 sText_IvSpDef[] = _("SPD");
 static const u8 sText_IvSpeed[] = _("SPE");
 
 // Box size in pixels, excluding the drop shadow
-#define IVBOX_WIDTH   100
-#define IVBOX_HEIGHT  36
+#define IVBOX_WIDTH   112
+#define IVBOX_HEIGHT  44
 #define IVBOX_SHADOW  3
+
+// Text layout. Glyph cells are ~13px tall and paint their background,
+// so rows must be at least that far apart or they clip each other.
+#define IVBOX_ROW_1       2
+#define IVBOX_ROW_2       15
+#define IVBOX_ROW_3       28
+#define IVBOX_COL_1       5
+#define IVBOX_COL_2       41
+#define IVBOX_COL_3       77
+#define IVBOX_VALUE_X     20  // Value offset from its label
 
 static void DrawIvBoxFrame(void)
 {
@@ -4945,7 +4957,7 @@ static void DrawIvBoxStat(const u8 *label, u8 stat, u32 iv, u8 nature, u8 x, u8 
     AddTextPrinterParameterized4(B_WIN_ENEMY_IV, FONT_SMALL_NARROW, x, y, 0, 0,
                                  colors == sIvBoxTextColors ? sIvBoxLabelColors : colors, TEXT_SKIP_DRAW, label);
     ConvertIntToDecimalStringN(valueText, iv, STR_CONV_MODE_RIGHT_ALIGN, 2);
-    AddTextPrinterParameterized4(B_WIN_ENEMY_IV, FONT_SMALL_NARROW, x + 16, y, 0, 0, colors, TEXT_SKIP_DRAW, valueText);
+    AddTextPrinterParameterized4(B_WIN_ENEMY_IV, FONT_SMALL_NARROW, x + IVBOX_VALUE_X, y, 0, 0, colors, TEXT_SKIP_DRAW, valueText);
 }
 
 void DrawEnemyIVs(void)
@@ -4953,27 +4965,46 @@ void DrawEnemyIVs(void)
     struct Pokemon *mon = &gEnemyParty[gBattlerPartyIndexes[GetBattlerAtPosition(B_POSITION_OPPONENT_LEFT)]];
     u8 nature = GetNature(mon);
 
+    if (!sShowEnemyIVBox)
+    {
+        FillWindowPixelBuffer(B_WIN_ENEMY_IV, PIXEL_FILL(IVBOX_COLOR_TRANSPARENT));
+        PutWindowTilemap(B_WIN_ENEMY_IV);
+        CopyWindowToVram(B_WIN_ENEMY_IV, COPYWIN_FULL);
+        return;
+    }
+
     LoadPalette(sIvBoxPalette, BG_PLTT_ID(IVBOX_PAL_SLOT), sizeof(sIvBoxPalette));
 
     FillWindowPixelBuffer(B_WIN_ENEMY_IV, PIXEL_FILL(IVBOX_COLOR_TRANSPARENT));
     FillWindowPixelRect(B_WIN_ENEMY_IV, PIXEL_FILL(IVBOX_COLOR_FILL), 0, 0, IVBOX_WIDTH, IVBOX_HEIGHT);
 
-    AddTextPrinterParameterized4(B_WIN_ENEMY_IV, FONT_SMALL_NARROW, 5, 2, 0, 0, sIvBoxTextColors, TEXT_SKIP_DRAW, gNatureNamePointers[nature]);
-    AddTextPrinterParameterized4(B_WIN_ENEMY_IV, FONT_SMALL_NARROW, IVBOX_WIDTH - 5 - GetStringWidth(FONT_SMALL_NARROW, sText_IvBoxHeader, 0), 2,
+    AddTextPrinterParameterized4(B_WIN_ENEMY_IV, FONT_SMALL_NARROW, IVBOX_COL_1, IVBOX_ROW_1, 0, 0, sIvBoxTextColors, TEXT_SKIP_DRAW, gNatureNamePointers[nature]);
+    AddTextPrinterParameterized4(B_WIN_ENEMY_IV, FONT_SMALL_NARROW, IVBOX_WIDTH - 5 - GetStringWidth(FONT_SMALL_NARROW, sText_IvBoxHeader, 0), IVBOX_ROW_1,
                                  0, 0, sIvBoxLabelColors, TEXT_SKIP_DRAW, sText_IvBoxHeader);
 
-    DrawIvBoxStat(sText_IvHp,    STAT_HP,    GetMonData(mon, MON_DATA_HP_IV),    nature, 5,  13);
-    DrawIvBoxStat(sText_IvAtk,   STAT_ATK,   GetMonData(mon, MON_DATA_ATK_IV),   nature, 36, 13);
-    DrawIvBoxStat(sText_IvDef,   STAT_DEF,   GetMonData(mon, MON_DATA_DEF_IV),   nature, 67, 13);
-    DrawIvBoxStat(sText_IvSpAtk, STAT_SPATK, GetMonData(mon, MON_DATA_SPATK_IV), nature, 5,  23);
-    DrawIvBoxStat(sText_IvSpDef, STAT_SPDEF, GetMonData(mon, MON_DATA_SPDEF_IV), nature, 36, 23);
-    DrawIvBoxStat(sText_IvSpeed, STAT_SPEED, GetMonData(mon, MON_DATA_SPEED_IV), nature, 67, 23);
+    DrawIvBoxStat(sText_IvHp,    STAT_HP,    GetMonData(mon, MON_DATA_HP_IV),    nature, IVBOX_COL_1, IVBOX_ROW_2);
+    DrawIvBoxStat(sText_IvAtk,   STAT_ATK,   GetMonData(mon, MON_DATA_ATK_IV),   nature, IVBOX_COL_2, IVBOX_ROW_2);
+    DrawIvBoxStat(sText_IvDef,   STAT_DEF,   GetMonData(mon, MON_DATA_DEF_IV),   nature, IVBOX_COL_3, IVBOX_ROW_2);
+    DrawIvBoxStat(sText_IvSpAtk, STAT_SPATK, GetMonData(mon, MON_DATA_SPATK_IV), nature, IVBOX_COL_1, IVBOX_ROW_3);
+    DrawIvBoxStat(sText_IvSpDef, STAT_SPDEF, GetMonData(mon, MON_DATA_SPDEF_IV), nature, IVBOX_COL_2, IVBOX_ROW_3);
+    DrawIvBoxStat(sText_IvSpeed, STAT_SPEED, GetMonData(mon, MON_DATA_SPEED_IV), nature, IVBOX_COL_3, IVBOX_ROW_3);
 
     // Frame last so text cells can't paint over the border
     DrawIvBoxFrame();
 
     PutWindowTilemap(B_WIN_ENEMY_IV);
     CopyWindowToVram(B_WIN_ENEMY_IV, COPYWIN_FULL);
+}
+
+// Returns FALSE if the box isn't available in this battle
+bool8 ToggleEnemyIVBox(void)
+{
+    if (gBattleTypeFlags & BATTLE_TYPE_TRAINER)
+        return FALSE;
+
+    sShowEnemyIVBox = !sShowEnemyIVBox;
+    DrawEnemyIVs();
+    return TRUE;
 }
 
 static void TurnValuesCleanUp(bool8 var0)
