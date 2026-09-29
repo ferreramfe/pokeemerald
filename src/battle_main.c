@@ -4882,7 +4882,7 @@ enum {
 static const u16 sIvBoxPalette[16] =
 {
     [IVBOX_COLOR_TRANSPARENT] = RGB(0, 0, 0),
-    [IVBOX_COLOR_FILL]        = RGB(31, 31, 26),
+    [IVBOX_COLOR_FILL]        = RGB(31, 31, 27),
     [IVBOX_COLOR_BORDER]      = RGB(5, 7, 5),
     [IVBOX_COLOR_SHADOW]      = RGB(10, 13, 11),
     [IVBOX_COLOR_TEXT]        = RGB(8, 8, 8),
