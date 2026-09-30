@@ -4870,6 +4870,10 @@ enum {
     IVBOX_COLOR_FILL,
     IVBOX_COLOR_BORDER,
     IVBOX_COLOR_SHADOW,
+    IVBOX_COLOR_SHADOW_LIGHT,
+    IVBOX_COLOR_SHADOW_LIGHTER,
+    IVBOX_COLOR_INNER_SHADOW,
+    IVBOX_COLOR_INNER_SHADOW_LIGHT,
     IVBOX_COLOR_TEXT,
     IVBOX_COLOR_TEXT_SHADOW,
     IVBOX_COLOR_UP,
@@ -4884,7 +4888,11 @@ static const u16 sIvBoxPalette[16] =
     [IVBOX_COLOR_TRANSPARENT] = RGB(0, 0, 0),
     [IVBOX_COLOR_FILL]        = RGB(31, 31, 27),
     [IVBOX_COLOR_BORDER]      = RGB(5, 7, 5),
-    [IVBOX_COLOR_SHADOW]      = RGB(10, 13, 11),
+    [IVBOX_COLOR_SHADOW]      = RGB(7, 10, 8),
+    [IVBOX_COLOR_SHADOW_LIGHT]= RGB(10, 13, 12),
+    [IVBOX_COLOR_SHADOW_LIGHTER]= RGB(15, 18, 16),
+    [IVBOX_COLOR_INNER_SHADOW]= RGB(24, 23, 14),
+    [IVBOX_COLOR_INNER_SHADOW_LIGHT]= RGB(27, 26, 22),
     [IVBOX_COLOR_TEXT]        = RGB(8, 8, 8),
     [IVBOX_COLOR_TEXT_SHADOW] = RGB(26, 26, 20),
     [IVBOX_COLOR_UP]          = RGB(28, 5, 4),
@@ -4908,7 +4916,7 @@ static const u8 sText_IvSpDef[] = _("SPD");
 static const u8 sText_IvSpeed[] = _("SPE");
 
 // Box size in pixels, excluding the drop shadow
-#define IVBOX_WIDTH   112
+#define IVBOX_WIDTH   117
 #define IVBOX_HEIGHT  44
 #define IVBOX_SHADOW  3
 
@@ -4917,27 +4925,89 @@ static const u8 sText_IvSpeed[] = _("SPE");
 #define IVBOX_ROW_1       2
 #define IVBOX_ROW_2       15
 #define IVBOX_ROW_3       28
-#define IVBOX_COL_1       5
-#define IVBOX_COL_2       41
-#define IVBOX_COL_3       77
+#define IVBOX_COL_1       7
+#define IVBOX_COL_2       43
+#define IVBOX_COL_3       79
 #define IVBOX_VALUE_X     20  // Value offset from its label
 
 static void DrawIvBoxFrame(void)
 {
     u8 win = B_WIN_ENEMY_IV;
 
-    // Drop shadow down-right, then a 2px dark border, like the healthboxes
-    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_SHADOW), IVBOX_SHADOW, IVBOX_HEIGHT, IVBOX_WIDTH, IVBOX_SHADOW);
-    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_SHADOW), IVBOX_WIDTH, IVBOX_SHADOW, IVBOX_SHADOW, IVBOX_HEIGHT);
-    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_BORDER), 1, 0, IVBOX_WIDTH - 2, 2);
-    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_BORDER), 1, IVBOX_HEIGHT - 2, IVBOX_WIDTH - 2, 2);
-    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_BORDER), 0, 1, 2, IVBOX_HEIGHT - 2);
-    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_BORDER), IVBOX_WIDTH - 2, 1, 2, IVBOX_HEIGHT - 2);
-    // Round the inner corners
-    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_BORDER), 2, 2, 1, 1);
-    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_BORDER), IVBOX_WIDTH - 3, 2, 1, 1);
-    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_BORDER), 2, IVBOX_HEIGHT - 3, 1, 1);
-    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_BORDER), IVBOX_WIDTH - 3, IVBOX_HEIGHT - 3, 1, 1);
+    // TOP-LEFT CORNER
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_SHADOW), 4, 1, 1, 2);
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_INNER_SHADOW), 5, 2, 1, 1);
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_SHADOW_LIGHT), 3, 1, 1, 1);
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_SHADOW_LIGHTER), 2, 1, 1, 1);
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_BORDER), 3, 2, 1, 1);
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_INNER_SHADOW), 3, 3, 1, 1);
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_SHADOW), 2, 2, 1, 1);
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_SHADOW_LIGHTER), 1, 2, 1, 1);
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_SHADOW_LIGHT), 1, 3, 1, 1);
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_BORDER), 2, 3, 1, 1);
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_SHADOW), 1, 4, 2, 1);
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_INNER_SHADOW), 2, 5, 1, 1);
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_SHADOW_LIGHTER), 0, 4, 1, 1);
+
+    // LEFT LINE
+    // Line
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_BORDER), 1, 5, 1, IVBOX_HEIGHT - 7);
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_SHADOW_LIGHT), 0, 5, 1, IVBOX_HEIGHT - 6);
+    // Inner Color
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_FILL), 3, 4, 1, IVBOX_HEIGHT - 4);
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_FILL), 4, 3, 1, IVBOX_HEIGHT - 4);
+    // Shadow
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_INNER_SHADOW_LIGHT), 2, 6, 1, IVBOX_HEIGHT - 9);
+
+    // BOTTOM-LEFT CORNER
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_INNER_SHADOW), 2, IVBOX_HEIGHT - 3, 1, 1);
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_INNER_SHADOW), 3, IVBOX_HEIGHT - 2, 1, 1);
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_SHADOW), 1, IVBOX_HEIGHT - 2, 2, 1);
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_SHADOW_LIGHT), 1, IVBOX_HEIGHT - 1, 1, 1);
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_SHADOW), 2, IVBOX_HEIGHT - 1, 1, 1);
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_SHADOW_LIGHTER), 0, IVBOX_HEIGHT - 1, 1, 1);
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_SHADOW_LIGHTER), 1, IVBOX_HEIGHT, 1, 1);
+
+    // BOTTOM LINE
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_BORDER), 3, IVBOX_HEIGHT - 1, IVBOX_WIDTH - 7, 1);
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_SHADOW_LIGHT), 2, IVBOX_HEIGHT, IVBOX_WIDTH - 6, 1);
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_INNER_SHADOW_LIGHT), 4, IVBOX_HEIGHT -2, IVBOX_WIDTH - 9, 1);
+
+    // BORDER-RIGHT CORNER
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_SHADOW_LIGHT), IVBOX_WIDTH - 4, IVBOX_HEIGHT - 2, 1, 2);
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_INNER_SHADOW), IVBOX_WIDTH - 5, IVBOX_HEIGHT - 2, 1, 1);
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_BORDER), IVBOX_WIDTH - 3, IVBOX_HEIGHT - 2, 1, 1);
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_SHADOW_LIGHT), IVBOX_WIDTH - 2, IVBOX_HEIGHT - 2, 1, 1);
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_BORDER), IVBOX_WIDTH - 2, IVBOX_HEIGHT - 3, 1, 1);
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_INNER_SHADOW), IVBOX_WIDTH - 3, IVBOX_HEIGHT - 3, 1, 1);
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_SHADOW_LIGHT), IVBOX_WIDTH - 2, IVBOX_HEIGHT - 4, 2, 1);
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_INNER_SHADOW), IVBOX_WIDTH - 2, IVBOX_HEIGHT - 5, 1, 1);
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_SHADOW_LIGHTER), IVBOX_WIDTH, IVBOX_HEIGHT - 3, 1, 1);
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_SHADOW_LIGHTER), IVBOX_WIDTH - 1, IVBOX_HEIGHT - 3, 1, 3);
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_SHADOW_LIGHTER), IVBOX_WIDTH - 3, IVBOX_HEIGHT - 1, 2, 1);
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_SHADOW_LIGHTER), IVBOX_WIDTH - 4, IVBOX_HEIGHT, 2, 1);
+
+    // RIGHT LINE
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_BORDER), IVBOX_WIDTH - 1, 3, 1, IVBOX_HEIGHT - 7);
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_SHADOW_LIGHT), IVBOX_WIDTH, 2, 1, IVBOX_HEIGHT - 5);
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_INNER_SHADOW_LIGHT), IVBOX_WIDTH - 2, 4, 1, IVBOX_HEIGHT - 9);
+
+    // RIGHT-TOP CORNER
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_INNER_SHADOW), IVBOX_WIDTH - 2, 3, 1, 1);
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_SHADOW), IVBOX_WIDTH - 2, 2, 2, 1);
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_SHADOW), IVBOX_WIDTH - 2, 1, 1, 1);
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_SHADOW_LIGHT), IVBOX_WIDTH - 1, 1, 1, 1);
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_SHADOW_LIGHTER), IVBOX_WIDTH, 1, 1, 1);
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_SHADOW_LIGHTER), IVBOX_WIDTH - 1, 0, 1, 1);
+    // TOP LINE
+    // Shadow
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_SHADOW_LIGHTER), 4, 0, 1, 1);
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_SHADOW_LIGHT), 5, 0, IVBOX_WIDTH - 6, 1);
+    // Line
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_BORDER), 5, 1, IVBOX_WIDTH - 7, 1);
+    // Inner shadow
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_INNER_SHADOW_LIGHT), 5, 2, IVBOX_WIDTH - 7, 1);
+    FillWindowPixelRect(win, PIXEL_FILL(IVBOX_COLOR_INNER_SHADOW), IVBOX_WIDTH - 3, 2, 1, 1);
 }
 
 static void DrawIvBoxStat(const u8 *label, u8 stat, u32 iv, u8 nature, u8 x, u8 y)
@@ -4976,7 +5046,7 @@ void DrawEnemyIVs(void)
     LoadPalette(sIvBoxPalette, BG_PLTT_ID(IVBOX_PAL_SLOT), sizeof(sIvBoxPalette));
 
     FillWindowPixelBuffer(B_WIN_ENEMY_IV, PIXEL_FILL(IVBOX_COLOR_TRANSPARENT));
-    FillWindowPixelRect(B_WIN_ENEMY_IV, PIXEL_FILL(IVBOX_COLOR_FILL), 0, 0, IVBOX_WIDTH, IVBOX_HEIGHT);
+    FillWindowPixelRect(B_WIN_ENEMY_IV, PIXEL_FILL(IVBOX_COLOR_FILL), 5, 0, IVBOX_WIDTH - 5, IVBOX_HEIGHT);
 
     AddTextPrinterParameterized4(B_WIN_ENEMY_IV, FONT_SMALL_NARROW, IVBOX_COL_1, IVBOX_ROW_1, 0, 0, sIvBoxTextColors, TEXT_SKIP_DRAW, gNatureNamePointers[nature]);
     AddTextPrinterParameterized4(B_WIN_ENEMY_IV, FONT_SMALL_NARROW, IVBOX_WIDTH - 5 - GetStringWidth(FONT_SMALL_NARROW, sText_IvBoxHeader, 0), IVBOX_ROW_1,
